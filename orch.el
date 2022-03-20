@@ -1,9 +1,9 @@
 ;; orch.el --- Emacs server for importing scribbles from the orch android app
 
-;; Version: 0.1.0
-;; Author: Yati Sagade <yati.sagade@gmail.com>
+;; Version: 0.1.1
+;; Author: Alok Regmi <sagar.r.alok@gmail.com>
 ;; Package-Requires: ((web-server "0.1.1"))
-;; Url: https://github.com/yati-sagade/orch
+;; Url: https://github.com/dragarok/orch
 
 ;; This software is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 ;; 
 
 ;;
-;; We start a very simple HTTP server (by default on port 4000), which has two endpoints:
+;; We start a very simple HTTP server (by default on port 1701), which has two endpoints:
 ;;
 ;; - /ping   (GET)     Responds with "pong" (text/plain). Can be used to server liveness check.
 ;;
@@ -58,7 +58,34 @@
                 ;; process is the Emacs process object, that also encapsulates network I/O.
                 (ws-response-header process 200 '("Content-type" . "text/plain"))
                 (process-send-string process "pong"))))
-           
+
+
+
+           ((:POST . "/insertjpg") .
+            (lambda (request)
+              ;; An "assoc list" is just a list of (key value) pairs. Calling
+              ;; (assoc "key" assoclist) will returns the *pair* (key value),
+              ;; if it exists in the assoclist, nil otherwise.  headers is
+              ;; such an assoclist, constructed by parsing the request headers
+              ;; and the request body. We are expecting the contents of the
+              ;; incoming file to be in the assoc list with key "file".
+              (with-slots (process headers) request
+                (let ((file (cdr (assoc "file" headers))))
+                  (if (null file)
+                      (orch-respond-text/plain process 400 "Missing file")
+                    ;; write-to-sha1-file generates a filename for our SVG
+                    ;; content by taking a SHA1 sum of it and then adding any
+                    ;; extension string that we give it, and writes our
+                    ;; content to that filename under the directory returned
+                    ;; by (image-dir), returning us the absolute path of the
+                    ;; file.
+                    (let ((image-path (orch-write-to-sha1-file (cdr (assoc 'content file)) "jpg")))
+                      (print (concat "Wrote " image-path))
+                      (orch-respond-text/plain process 200 "OK")
+                      (orch-insert-image-link image-path)
+                      image-path))))))
+
+
            ((:POST . "/insert") .
             (lambda (request)
               ;; An "assoc list" is just a list of (key value) pairs. Calling
@@ -81,8 +108,35 @@
                       (print (concat "Wrote " image-path))
                       (orch-respond-text/plain process 200 "OK")
                       (orch-insert-image-link image-path)
+                      image-path))))))
+
+           
+           ((:POST . "/insertpng") .
+            (lambda (request)
+              ;; An "assoc list" is just a list of (key value) pairs. Calling
+              ;; (assoc "key" assoclist) will returns the *pair* (key value),
+              ;; if it exists in the assoclist, nil otherwise.  headers is
+              ;; such an assoclist, constructed by parsing the request headers
+              ;; and the request body. We are expecting the contents of the
+              ;; incoming file to be in the assoc list with key "file".
+              (with-slots (process headers) request
+                (let ((file (cdr (assoc "file" headers))))
+                  (if (null file)
+                      (orch-respond-text/plain process 400 "Missing file")
+                    ;; write-to-sha1-file generates a filename for our SVG
+                    ;; content by taking a SHA1 sum of it and then adding any
+                    ;; extension string that we give it, and writes our
+                    ;; content to that filename under the directory returned
+                    ;; by (image-dir), returning us the absolute path of the
+                    ;; file.
+                    (let ((image-path (orch-write-to-sha1-file (cdr (assoc 'content file)) "png")))
+                      (print (concat "Wrote " image-path))
+                      (orch-respond-text/plain process 200 "OK")
+                      (orch-insert-image-link image-path)
                       image-path)))))))
-         port)))
+         port
+         nil
+         :host "0.0.0.0")))
 
 (defun orch-stop-server ()
   (when (not (null orch-server))
@@ -93,13 +147,13 @@
   (interactive)
   (if (null orch-server)
       (progn
-        (orch-start-server 4000)
-        (print "orch server started on port 4000"))
+        (orch-start-server 1701)
+        (print "orch server started on port 1701"))
     (progn
       (orch-stop-server)
       (print "orch server stopped"))))
 
-(defun orch-image-dir () "~/Pictures/orch")
+(defun orch-image-dir () "~/Dropbox/org/.attach/orch")
 
 (defun orch-respond-text/plain (process status-code message)
   "Write an HTTP message to `process` with the given status code. The
@@ -141,3 +195,4 @@
 (defun orch-insert-newline-after ()
   (move-end-of-line nil)
   (insert "\n"))
+
